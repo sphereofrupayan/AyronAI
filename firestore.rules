@@ -1,0 +1,63 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+
+      function isOwner() {
+        return request.auth != null
+          && request.auth.uid == userId;
+      }
+
+      function validProfile() {
+        return request.resource.data.keys().hasOnly([
+          'displayName',
+          'email',
+          'phoneNumber',
+          'photoURL',
+          'providerIds',
+          'createdAt',
+          'lastLoginAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'displayName',
+          'email',
+          'phoneNumber',
+          'photoURL',
+          'providerIds',
+          'createdAt',
+          'lastLoginAt'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 100
+        && (request.resource.data.email == null
+          || request.resource.data.email is string)
+        && (request.resource.data.phoneNumber == null
+          || request.resource.data.phoneNumber is string)
+        && (request.resource.data.photoURL == null
+          || request.resource.data.photoURL is string)
+        && request.resource.data.providerIds is list
+        && request.resource.data.providerIds.size() <= 5
+        && request.resource.data.lastLoginAt == request.time;
+      }
+
+      allow get: if isOwner();
+      allow list: if false;
+
+      allow create: if isOwner()
+        && validProfile()
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isOwner()
+        && validProfile()
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

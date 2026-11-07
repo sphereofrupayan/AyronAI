@@ -1,0 +1,12 @@
+venv/
+.env
+__pycache__/
+*.pyc
+*firebase-adminsdk*.json
+*service-account*.json
+package-lock.json
+backgroundfull.mp4
+*.gif
+*.mp4
+logos/
+logos/
