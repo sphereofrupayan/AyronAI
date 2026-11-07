@@ -34,7 +34,7 @@ For local Firebase Admin access, either set `GOOGLE_APPLICATION_CREDENTIALS` to 
 
 ## Deploy to Vercel
 
-This is a Flask application with a Vercel Python function entry point. Import the GitHub repository into Vercel and deploy from the repository root. Set the required environment variables in the Vercel project settings; do not upload local `.env` or service-account files.
+This is a Flask application. Vercel detects the `app` instance in the root `app.py` and serves all application routes through its Python function; do not add a catch-all rewrite or a separate `api/index.py` wrapper. Import the GitHub repository into Vercel, use the Flask framework preset, and deploy from the repository root. Set the required environment variables in the Vercel project settings; do not upload local `.env` or service-account files. The site and authentication-config route can load without `GROQ_API_KEY`; AI endpoints return a clear `503` until it is configured.
 
 The Firebase service account must be provided through a protected environment variable or an appropriate workload identity. A path such as `C:\Users\...\Downloads\...json` only exists on the local computer and will not work in a cloud deployment.
 

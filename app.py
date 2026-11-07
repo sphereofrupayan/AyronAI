@@ -1,4 +1,4 @@
-from functools import wraps
+from functools import lru_cache, wraps
 from threading import Lock
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -37,7 +37,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 logger = logging.getLogger(__name__)
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 CRICKET_API_KEY = os.getenv("CRICKET_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
@@ -57,6 +56,14 @@ EMAIL_OTP_WINDOW = timedelta(minutes=15)
 EMAIL_OTP_MAX_ATTEMPTS = 5
 _firebase_app = None
 _firebase_app_lock = Lock()
+
+
+@lru_cache(maxsize=1)
+def get_groq_client():
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("AI features are unavailable because GROQ_API_KEY is not configured.")
+    return Groq(api_key=api_key)
 
 
 @app.after_request
@@ -162,6 +169,18 @@ def require_firebase_user(handler):
     return wrapped
 
 
+def require_groq_api_key(handler):
+    @wraps(handler)
+    def wrapped(*args, **kwargs):
+        if not os.getenv("GROQ_API_KEY"):
+            return jsonify({
+                "error": "AI features are unavailable because GROQ_API_KEY is not configured."
+            }), 503
+        return handler(*args, **kwargs)
+
+    return wrapped
+
+
 def email_otp_missing_settings():
     missing = []
     secret = os.getenv("EMAIL_OTP_SECRET", "")
@@ -262,7 +281,7 @@ def send_email_otp_message(email_address, code):
 
 def ask_groq(system_prompt, user_prompt):
     """Shared helper for every tool route."""
-    response = client.chat.completions.create(
+    response = get_groq_client().chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -478,6 +497,7 @@ def public_asset():
 
 @app.route("/chat", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def chat():
 
     data = request.get_json()
@@ -588,7 +608,7 @@ def chat():
     })
 
     try:
-        response = client.chat.completions.create(
+        response = get_groq_client().chat.completions.create(
             model=GROQ_MODEL,
             messages=messages
         )
@@ -602,6 +622,7 @@ def chat():
 
 @app.route("/cricket-score", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def cricket_score():
     data = request.get_json()
     message = (data.get("message") or "").strip()
@@ -622,6 +643,7 @@ def cricket_score():
     return jsonify({"reply": reply})
 @app.route("/resume-analyze", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def resume_analyze():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -655,6 +677,7 @@ def resume_analyze():
 
 @app.route("/notes-summarize", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def notes_summarize():
     data = request.get_json()
     notes = (data.get("text") or "").strip()
@@ -678,6 +701,7 @@ def notes_summarize():
 
 @app.route("/code-review", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def code_review():
     data = request.get_json()
     code = (data.get("code") or "").strip()
@@ -704,6 +728,7 @@ def code_review():
 
 @app.route("/email-write", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def email_write():
     data = request.get_json()
     details = (data.get("details") or "").strip()
@@ -728,6 +753,7 @@ def email_write():
 
 @app.route("/study-planner", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def study_planner():
     data = request.get_json()
     subject = (data.get("subject") or "").strip()
@@ -758,6 +784,7 @@ def study_planner():
 
 @app.route("/quiz-generate", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def quiz_generate():
     data = request.get_json()
     topic = (data.get("topic") or "").strip()
@@ -808,6 +835,7 @@ def pdf_upload():
 
 @app.route("/pdf-chat", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def pdf_chat():
     data = request.get_json()
     context = (data.get("context") or "").strip()
@@ -833,6 +861,7 @@ def pdf_chat():
 
 @app.route("/translate", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def translate():
     data = request.get_json()
     text = (data.get("text") or "").strip()
@@ -858,6 +887,7 @@ def translate():
 
 @app.route("/grammar-check", methods=["POST"])
 @require_firebase_user
+@require_groq_api_key
 def grammar_check():
     data = request.get_json()
     text = (data.get("text") or "").strip()
