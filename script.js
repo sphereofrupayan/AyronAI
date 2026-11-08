@@ -93,6 +93,130 @@ function showToast(message) {
     toastTimeout = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function appendInlineMarkdown(parent, text) {
+    const tokenPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|_([^_\n]+)_|(https?:\/\/[^\s<]+)/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = tokenPattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            parent.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        }
+
+        if (match[1]) {
+            const link = createMarkdownLink(match[1], match[2]);
+            if (link) parent.appendChild(link);
+            else parent.appendChild(document.createTextNode(match[0]));
+        } else if (match[3]) {
+            const code = document.createElement("code");
+            code.textContent = match[3];
+            parent.appendChild(code);
+        } else if (match[4] || match[5]) {
+            const strong = document.createElement("strong");
+            appendInlineMarkdown(strong, match[4] || match[5]);
+            parent.appendChild(strong);
+        } else if (match[6] || match[7]) {
+            const emphasis = document.createElement("em");
+            appendInlineMarkdown(emphasis, match[6] || match[7]);
+            parent.appendChild(emphasis);
+        } else {
+            const rawUrl = match[8];
+            const url = rawUrl.replace(/[.,!?;:]+$/, "");
+            const link = createMarkdownLink(url, url);
+            if (link) {
+                parent.appendChild(link);
+                parent.appendChild(document.createTextNode(rawUrl.slice(url.length)));
+            } else {
+                parent.appendChild(document.createTextNode(rawUrl));
+            }
+        }
+
+        lastIndex = tokenPattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+        parent.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+}
+
+function createMarkdownLink(label, href) {
+    let url;
+    try {
+        url = new URL(href);
+    } catch (error) {
+        return null;
+    }
+    if (!["http:", "https:", "mailto:"].includes(url.protocol)) return null;
+
+    const link = document.createElement("a");
+    link.href = url.href;
+    link.textContent = label;
+    if (url.protocol !== "mailto:") {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+    }
+    return link;
+}
+
+function renderAssistantMarkdown(container, text) {
+    container.replaceChildren();
+    const lines = text.split(/\r?\n/);
+    let paragraphLines = [];
+    let list = null;
+    let listType = null;
+
+    const flushParagraph = () => {
+        if (!paragraphLines.length) return;
+        const paragraph = document.createElement("p");
+        appendInlineMarkdown(paragraph, paragraphLines.join(" "));
+        container.appendChild(paragraph);
+        paragraphLines = [];
+    };
+    const flushList = () => {
+        if (!list) return;
+        container.appendChild(list);
+        list = null;
+        listType = null;
+    };
+
+    lines.forEach(line => {
+        const heading = line.match(/^\s{0,3}(#{1,4})\s+(.+?)\s*#*\s*$/);
+        const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+        const numbered = line.match(/^\s*(\d+)[.)]\s+(.+)$/);
+
+        if (!line.trim()) {
+            flushParagraph();
+            flushList();
+        } else if (heading) {
+            flushParagraph();
+            flushList();
+            const headingElement = document.createElement(`h${heading[1].length}`);
+            appendInlineMarkdown(headingElement, heading[2]);
+            container.appendChild(headingElement);
+        } else if (bullet || numbered) {
+            flushParagraph();
+            const nextListType = bullet ? "ul" : "ol";
+            if (listType !== nextListType) flushList();
+            if (!list) {
+                list = document.createElement(nextListType);
+                listType = nextListType;
+                if (numbered && Number(numbered[1]) !== 1) {
+                    list.start = Number(numbered[1]);
+                }
+            }
+            const item = document.createElement("li");
+            appendInlineMarkdown(item, (bullet || numbered)[bullet ? 1 : 2]);
+            list.appendChild(item);
+        } else {
+            flushList();
+            paragraphLines.push(line.trim());
+        }
+    });
+
+    flushParagraph();
+    flushList();
+}
+
 function appendMessage(role, text, pending = false) {
     welcomeScreen.classList.add("hidden");
     chatThread.classList.add("active");
@@ -202,7 +326,8 @@ async function sendMessage(messageOverride) {
     try {
         const reply = await requestAssistant(message);
         pending.content.classList.remove("message-status");
-        pending.content.textContent = reply || "I couldn't generate a response. Please try again.";
+        const formattedReply = reply || "I couldn't generate a response. Please try again.";
+        renderAssistantMarkdown(pending.content, formattedReply);
         responseText.textContent = reply || "";
         conversationHistory.push({ role: "assistant", content: reply || "" });
         if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
