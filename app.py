@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 CRICKET_API_KEY = os.getenv("CRICKET_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+CALENDARIFIC_COUNTRY = os.getenv("CALENDARIFIC_COUNTRY", "IN").strip().upper()
 
 GROQ_MODEL = "openai/gpt-oss-120b"
 FIREBASE_PUBLIC_CONFIG = {
@@ -300,9 +301,74 @@ def extract_pdf_text(file_storage):
     return text
 
 
+@lru_cache(maxsize=3)
+def get_calendarific_holidays(year, country):
+    response = requests.get(
+        "https://calendarific.com/api/v2/holidays",
+        params={
+            "api_key": os.getenv("CALENDARIFIC_API_KEY"),
+            "country": country,
+            "year": year,
+        },
+        timeout=8,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or payload.get("meta", {}).get("code") != 200:
+        raise ValueError("Calendarific returned an unsuccessful response.")
+
+    holidays = payload.get("response", {}).get("holidays")
+    if not isinstance(holidays, list):
+        raise ValueError("Calendarific returned an invalid holiday list.")
+    return holidays
+
+
 @app.route("/")
 def home():
     return send_from_directory(".", "index.html")
+
+
+@app.get("/api/special-date")
+def special_date():
+    if not os.getenv("CALENDARIFIC_API_KEY"):
+        return jsonify({"error": "Special dates are not configured on this server."}), 503
+    if not re.fullmatch(r"[A-Z]{2}", CALENDARIFIC_COUNTRY):
+        logger.error("CALENDARIFIC_COUNTRY must be a two-letter country code.")
+        return jsonify({"error": "Special dates are not configured correctly."}), 500
+
+    india_timezone = timezone(timedelta(hours=5, minutes=30))
+    today = datetime.now(india_timezone).date()
+    try:
+        holidays = get_calendarific_holidays(today.year, CALENDARIFIC_COUNTRY)
+        upcoming = []
+        for holiday in holidays:
+            if not isinstance(holiday, dict):
+                raise ValueError("Calendarific returned an invalid holiday.")
+            holiday_date_data = holiday.get("date")
+            if not isinstance(holiday_date_data, dict) or not isinstance(
+                holiday_date_data.get("iso"), str
+            ):
+                raise ValueError("Calendarific returned an invalid holiday date.")
+            holiday_date = datetime.strptime(
+                holiday_date_data["iso"][:10], "%Y-%m-%d"
+            ).date()
+            name = holiday.get("name")
+            if holiday_date >= today and isinstance(name, str) and name:
+                upcoming.append((holiday_date, name))
+        if not upcoming:
+            return jsonify({"holiday": None})
+
+        next_date = min(date for date, _ in upcoming)
+        names = [name for date, name in upcoming if date == next_date]
+        return jsonify({
+            "holiday": {
+                "date": next_date.isoformat(),
+                "names": names,
+            }
+        })
+    except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+        logger.warning("Calendarific request failed (%s).", type(error).__name__)
+        return jsonify({"error": "Special dates are unavailable right now."}), 503
 
 
 @app.get("/api/firebase-config")

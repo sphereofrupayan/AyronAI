@@ -6,6 +6,8 @@ const emptyHistory = document.querySelector("#emptyHistory");
 const responseText = document.querySelector("#responseText");
 const chatThread = document.querySelector("#chatThread");
 const welcomeScreen = document.querySelector("#welcomeScreen");
+const specialDateName = document.querySelector("#specialDateName");
+const specialDateDay = document.querySelector("#specialDateDay");
 const toolsOverlay = document.querySelector("#toolsSection");
 const toolModalOverlay = document.querySelector("#toolModalOverlay");
 const toolModalTitle = document.querySelector("#toolModalTitle");
@@ -91,6 +93,35 @@ function showToast(message) {
     toast.classList.add("show");
     window.clearTimeout(toastTimeout);
     toastTimeout = window.setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+async function loadSpecialDate() {
+    try {
+        const response = await fetch("/api/special-date");
+        const data = await response.json();
+        if (!response.ok || data.error) {
+            throw new Error(data.error || "Could not load special dates.");
+        }
+
+        if (!data.holiday) {
+            specialDateName.textContent = "No upcoming holidays found this year";
+            specialDateDay.textContent = "";
+            return;
+        }
+
+        const holidayDate = new Date(`${data.holiday.date}T00:00:00`);
+        specialDateName.textContent = data.holiday.names.join(", ");
+        specialDateDay.dateTime = data.holiday.date;
+        specialDateDay.textContent = new Intl.DateTimeFormat(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric"
+        }).format(holidayDate);
+    } catch (error) {
+        console.error("Could not load special dates:", error);
+        specialDateName.textContent = "Special dates are unavailable right now";
+        specialDateDay.textContent = "";
+    }
 }
 
 function appendInlineMarkdown(parent, text) {
@@ -835,3 +866,4 @@ window.addEventListener("rusho-auth-state-changed", event => {
 renderHistory();
 filterModules();
 getLocation();
+loadSpecialDate();

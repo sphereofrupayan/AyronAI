@@ -7,7 +7,7 @@ Ayron is a Flask-powered AI assistant with Google and email-code sign-in, chat h
 - Google sign-in and one-time email verification codes
 - Firebase Authentication and Firestore user profiles
 - AI assistant and utility APIs powered by Groq
-- Weather, cricket, and PDF tools
+- Weather, cricket, holiday/special-date, and PDF tools
 
 ## Requirements
 
@@ -51,6 +51,7 @@ Set these variables for both Preview and Production deployments:
 - `GROQ_API_KEY`
 
 Set optional module keys such as `OPENWEATHER_API_KEY` and `CRICKET_API_KEY` if those modules are needed.
+To show the next holiday above the chat welcome screen, set `CALENDARIFIC_API_KEY` and optionally `CALENDARIFIC_COUNTRY` (two-letter country code, default `IN`) in the server environment. Do not put the Calendarific key in frontend code or commit it.
 
 Firebase must authorize the deployed site's domain for Google sign-in. Deploy `firestore.rules` to the same Firebase project.
 
