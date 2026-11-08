@@ -17,6 +17,9 @@ const toolsGrid = document.querySelector("#toolsGrid");
 const moduleSearchInput = document.querySelector("#moduleSearchInput");
 const moduleCount = document.querySelector("#moduleCount");
 const modulesEmpty = document.querySelector("#modulesEmpty");
+const composerAddBtn = document.querySelector("#composerAddBtn");
+const composerToolsMenu = document.querySelector("#composerToolsMenu");
+const thinkMenuOption = document.querySelector("#thinkMenuOption");
 
 let conversationHistory = [];
 let userLocation = { lat: null, lon: null };
@@ -429,6 +432,19 @@ function closeTools() {
     document.querySelector("#openToolsBtn").focus();
 }
 
+function closeComposerTools(restoreFocus = false) {
+    composerToolsMenu.hidden = true;
+    composerAddBtn.setAttribute("aria-expanded", "false");
+    if (restoreFocus) composerAddBtn.focus();
+}
+
+function toggleThinkMode() {
+    const enabled = document.querySelector("#thinkBtn").getAttribute("aria-pressed") !== "true";
+    document.querySelector("#thinkBtn").setAttribute("aria-pressed", String(enabled));
+    thinkMenuOption.setAttribute("aria-checked", String(enabled));
+    showToast(enabled ? "Thoughtful response mode enabled." : "Thoughtful response mode disabled.");
+}
+
 function filterModules() {
     const query = moduleSearchInput.value.trim().toLowerCase();
     const cards = [...toolsGrid.querySelectorAll(".tool-card")];
@@ -556,6 +572,22 @@ function openToolModal(key) {
         return;
     }
 
+    if (["web", "research", "image", "sketch"].includes(key)) {
+        closeTools();
+        toolModalTitle.textContent = {
+            web: "Web search",
+            research: "Deep research",
+            image: "Create image",
+            sketch: "Sketch"
+        }[key];
+        toolModalBody.replaceChildren();
+        toolModalOverlay.classList.add("active");
+        toolModalOverlay.setAttribute("aria-hidden", "false");
+        if (key === "sketch") buildSketchTool();
+        else buildConnectedTool(key);
+        return;
+    }
+
     const config = toolConfig[key];
     if (!config) return;
     closeTools();
@@ -630,6 +662,179 @@ function openToolModal(key) {
             submit.textContent = config.submitLabel;
         }
     });
+}
+
+function addToolField(labelText, placeholder, type = "text") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "tool-field";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if (type !== "textarea") input.type = type;
+    input.placeholder = placeholder;
+    input.maxLength = type === "textarea" ? 1000 : 500;
+    wrapper.append(label, input);
+    return { wrapper, input };
+}
+
+function renderSearchResults(container, results) {
+    container.replaceChildren();
+    container.className = "tool-result search-results";
+    if (!results.length) {
+        container.textContent = "No results found. Try a different query.";
+        return;
+    }
+
+    results.forEach(result => {
+        const item = document.createElement("article");
+        item.className = "search-result";
+        const link = document.createElement("a");
+        link.href = result.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = result.title || result.url;
+        const excerpt = document.createElement("p");
+        excerpt.textContent = result.content || "";
+        item.append(link, excerpt);
+        container.appendChild(item);
+    });
+}
+
+function buildConnectedTool(key) {
+    const isImage = key === "image";
+    const { wrapper, input } = addToolField(
+        isImage ? "Describe the image you want" : key === "research" ? "Research question" : "Search the web",
+        isImage ? "A watercolor illustration of a quiet mountain village at sunrise..." : "What would you like to find out?",
+        isImage ? "textarea" : "text"
+    );
+    if (isImage) input.rows = 3;
+    const submit = document.createElement("button");
+    submit.className = "tool-submit-btn";
+    submit.type = "button";
+    submit.textContent = isImage ? "Generate image" : key === "research" ? "Start research" : "Search";
+    const result = document.createElement("div");
+    toolModalBody.append(wrapper, submit, result);
+
+    submit.addEventListener("click", async () => {
+        const query = input.value.trim();
+        if (!query) {
+            result.className = "tool-error";
+            result.textContent = isImage ? "Describe the image first." : "Enter a query first.";
+            return;
+        }
+
+        submit.disabled = true;
+        submit.textContent = isImage ? "Generating..." : key === "research" ? "Researching..." : "Searching...";
+        result.className = "tool-result";
+        result.textContent = isImage ? "Creating your image. This can take a little while..." : "Searching trusted sources...";
+        try {
+            const response = await authenticatedFetch(
+                isImage ? "/api/generate-image" : key === "research" ? "/api/deep-research" : "/api/web-search",
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(isImage ? { prompt: query } : { query })
+                }
+            );
+            const data = await response.json();
+            if (!response.ok || data.error) throw new Error(data.error || "The request could not be completed.");
+
+            if (isImage) {
+                result.replaceChildren();
+                result.className = "tool-result generated-image-result";
+                const image = document.createElement("img");
+                image.src = data.image;
+                image.alt = query;
+                const download = document.createElement("a");
+                download.href = data.image;
+                download.download = "ayron-generated-image.jpg";
+                download.textContent = "Download image";
+                result.append(image, download);
+            } else if (key === "research") {
+                result.replaceChildren();
+                result.className = "tool-result research-result";
+                const report = document.createElement("div");
+                renderAssistantMarkdown(report, data.report || "No report was returned.");
+                const sourceHeading = document.createElement("h4");
+                sourceHeading.textContent = "Sources";
+                const sources = document.createElement("div");
+                result.append(report, sourceHeading, sources);
+                renderSearchResults(sources, data.sources || []);
+            } else {
+                renderSearchResults(result, data.results || []);
+            }
+        } catch (error) {
+            console.error(`${key} request failed:`, error);
+            result.className = "tool-error";
+            result.textContent = error.message || "Could not reach the server. Please try again.";
+        } finally {
+            submit.disabled = false;
+            submit.textContent = isImage ? "Generate image" : key === "research" ? "Start research" : "Search";
+        }
+    });
+}
+
+function buildSketchTool() {
+    const instructions = document.createElement("p");
+    instructions.className = "sketch-instructions";
+    instructions.textContent = "Draw with your mouse, touch, or pen, then download your sketch as a PNG.";
+    const canvas = document.createElement("canvas");
+    canvas.className = "sketch-canvas";
+    canvas.width = 1000;
+    canvas.height = 600;
+    canvas.setAttribute("aria-label", "Sketch drawing area");
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "#171717";
+    context.lineWidth = 5;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    let drawing = false;
+
+    const getPoint = event => {
+        const bounds = canvas.getBoundingClientRect();
+        return {
+            x: (event.clientX - bounds.left) * canvas.width / bounds.width,
+            y: (event.clientY - bounds.top) * canvas.height / bounds.height
+        };
+    };
+    canvas.addEventListener("pointerdown", event => {
+        drawing = true;
+        canvas.setPointerCapture(event.pointerId);
+        const point = getPoint(event);
+        context.beginPath();
+        context.moveTo(point.x, point.y);
+    });
+    canvas.addEventListener("pointermove", event => {
+        if (!drawing) return;
+        const point = getPoint(event);
+        context.lineTo(point.x, point.y);
+        context.stroke();
+    });
+    canvas.addEventListener("pointerup", () => { drawing = false; });
+    canvas.addEventListener("pointercancel", () => { drawing = false; });
+
+    const actions = document.createElement("div");
+    actions.className = "sketch-actions";
+    const clear = document.createElement("button");
+    clear.className = "tool-submit-btn sketch-secondary";
+    clear.type = "button";
+    clear.textContent = "Clear";
+    clear.addEventListener("click", () => {
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    });
+    const download = document.createElement("a");
+    download.className = "tool-submit-btn sketch-download";
+    download.href = canvas.toDataURL("image/png");
+    download.download = "ayron-sketch.png";
+    download.textContent = "Download sketch";
+    download.addEventListener("click", () => {
+        download.href = canvas.toDataURL("image/png");
+    });
+    actions.append(clear, download);
+    toolModalBody.append(instructions, canvas, actions);
 }
 
 function renderQuiz(container, questions) {
@@ -772,7 +977,51 @@ document.querySelector("#newChatBtn").addEventListener("click", () => {
     document.querySelector(".sidebar").classList.remove("mobile-open");
 });
 document.querySelector("#openToolsBtn").addEventListener("click", openTools);
-document.querySelector("#composerAddBtn").addEventListener("click", openTools);
+composerAddBtn.addEventListener("click", () => {
+    composerToolsMenu.hidden = !composerToolsMenu.hidden;
+    composerAddBtn.setAttribute("aria-expanded", String(!composerToolsMenu.hidden));
+    if (!composerToolsMenu.hidden) composerToolsMenu.querySelector('[role="menuitem"]').focus();
+});
+composerToolsMenu.addEventListener("click", event => {
+    const option = event.target.closest("[data-composer-action]");
+    if (!option) return;
+
+    const action = option.dataset.composerAction;
+    closeComposerTools(true);
+    if (["pdf", "image", "web", "research", "sketch"].includes(action)) {
+        openToolModal(action);
+    } else if (action === "library") {
+        openTools();
+    } else if (action === "think") {
+        toggleThinkMode();
+    } else {
+        const destinations = {
+            github: "https://github.com/login",
+            platform: "https://platform.openai.com/api-keys",
+            gmail: "https://mail.google.com/"
+        };
+        const destination = destinations[action];
+        if (destination) window.open(destination, "_blank", "noopener,noreferrer");
+    }
+});
+composerToolsMenu.addEventListener("keydown", event => {
+    const options = [...composerToolsMenu.querySelectorAll('[role^="menuitem"]')];
+    const index = options.indexOf(document.activeElement);
+    let nextIndex;
+    if (event.key === "ArrowDown") nextIndex = (index + 1) % options.length;
+    else if (event.key === "ArrowUp") nextIndex = (index - 1 + options.length) % options.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = options.length - 1;
+    if (nextIndex !== undefined) {
+        event.preventDefault();
+        options[nextIndex].focus();
+    }
+});
+document.addEventListener("click", event => {
+    if (!composerToolsMenu.hidden && !composerToolsMenu.contains(event.target) && !composerAddBtn.contains(event.target)) {
+        closeComposerTools();
+    }
+});
 document.querySelector("#closeToolsBtn").addEventListener("click", closeTools);
 toolsGrid.querySelectorAll(".tool-card").forEach(card => {
     card.addEventListener("click", () => openToolModal(card.dataset.tool));
@@ -843,14 +1092,13 @@ document.querySelector("#mobileMenuBtn").addEventListener("click", () => {
 document.querySelector("#upgradeBtn").addEventListener("click", () => showToast("Upgrade options are not available yet."));
 document.querySelector("#topUpgradeBtn").addEventListener("click", () => showToast("Upgrade options are not available yet."));
 document.querySelector("#thinkBtn").addEventListener("click", event => {
-    const button = event.currentTarget;
-    const enabled = button.getAttribute("aria-pressed") !== "true";
-    button.setAttribute("aria-pressed", String(enabled));
-    showToast(enabled ? "Thoughtful response mode enabled." : "Thoughtful response mode disabled.");
+    toggleThinkMode();
 });
 document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
-        if (toolModalOverlay.classList.contains("active")) {
+        if (!composerToolsMenu.hidden) {
+            closeComposerTools(true);
+        } else if (toolModalOverlay.classList.contains("active")) {
             closeToolModal();
         } else if (toolsOverlay.classList.contains("active")) {
             closeTools();

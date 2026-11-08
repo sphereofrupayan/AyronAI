@@ -184,8 +184,8 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .avatar { display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: #777; color: #fff; font-size: 10px; font-weight: 600; }
 .account-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .account-copy strong { overflow: hidden; color: #eee; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.account-copy span { color: #999; font-size: 10px; }
-.upgrade-button, .top-upgrade { padding: 6px 10px; border: 1px solid #414141; border-radius: 999px; background: #1d1d1d; color: #f2f2f2; font-size: 11px; font-weight: 600; cursor: pointer; }
+.account-copy span { overflow: hidden; color: #999; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.upgrade-button, .top-upgrade { flex: 0 0 auto; padding: 6px 10px; border: 1px solid #414141; border-radius: 999px; background: #1d1d1d; color: #f2f2f2; font-size: 11px; font-weight: 600; cursor: pointer; }
 .upgrade-button:hover, .top-upgrade:hover { background: #2a2a2a; }
 
 .main-panel { position: relative; display: flex; flex: 1; min-width: 0; height: 100%; flex-direction: column; background: var(--page); }
@@ -208,7 +208,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .suggestion { padding: 9px 13px; border: 1px solid #303030; border-radius: 999px; background: #0a0a0a; color: #bcbcbc; font-size: 12px; cursor: pointer; }
 .suggestion:hover { border-color: #555; background: #171717; color: #fff; }
 
-.chat-thread { position: relative; isolation: isolate; display: none; width: min(100% - 40px, 790px); flex: 1; overflow-y: auto; padding: 82px 0 30px; scrollbar-width: thin; scrollbar-color: #333 transparent; }
+.chat-thread { position: relative; isolation: isolate; display: none; width: 100%; flex: 1; overflow-y: auto; padding: 82px max(24px, calc((100% - 740px) / 2)) 30px; scrollbar-width: thin; scrollbar-color: #333 transparent; }
 .chat-thread.active { display: block; }
 .chat-thread::before { position: absolute; z-index: -1; top: 50%; left: 50%; color: rgba(135, 174, 255, .1); content: "A"; font-family: Georgia, "Times New Roman", serif; font-size: clamp(220px, 35vw, 380px); font-weight: 700; line-height: 1; opacity: .24; pointer-events: none; transform: translate(-50%, -50%); user-select: none; }
 .welcome-screen.hidden { display: none; }
@@ -242,8 +242,21 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .message-actions button:hover { background: #1d1d1d; color: #ddd; }
 
 .composer-area { position: relative; z-index: 2; width: 100%; padding: 12px 24px 18px; background: linear-gradient(transparent, #000 18%); }
-.composer { display: flex; align-items: center; gap: 9px; width: min(100%, 740px); min-height: 54px; margin: 0 auto; padding: 7px 8px 7px 12px; border: 1px solid #343434; border-radius: 28px; background: #1b1b1b; box-shadow: 0 3px 16px rgba(0,0,0,.2); }
+.composer { position: relative; display: flex; align-items: center; gap: 9px; width: min(100%, 740px); min-height: 54px; margin: 0 auto; padding: 7px 8px 7px 12px; border: 1px solid #343434; border-radius: 28px; background: #1b1b1b; box-shadow: 0 3px 16px rgba(0,0,0,.2); }
 .composer:focus-within { border-color: #4a4a4a; }
+.composer-tools-menu { position: absolute; z-index: 5; bottom: calc(100% + 10px); left: 0; display: grid; width: min(520px, calc(100vw - 48px)); max-height: min(62vh, 470px); gap: 2px; overflow-y: auto; padding: 8px; border: 1px solid #444; border-radius: 16px; background: #2b2b2b; box-shadow: 0 14px 40px rgba(0,0,0,.55); scrollbar-color: #666 transparent; }
+.composer-tools-menu[hidden] { display: none; }
+.composer-tool-option { display: flex; min-height: 42px; align-items: center; gap: 12px; padding: 6px 10px; border: 0; border-radius: 10px; background: transparent; color: #eee; text-align: left; cursor: pointer; }
+.composer-tool-option:hover, .composer-tool-option:focus-visible { background: #414141; }
+.composer-tool-icon { display: grid; flex: 0 0 18px; width: 18px; place-items: center; color: #d3d3d3; font-size: 17px; }
+.composer-tool-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.composer-tool-icon.brand-github svg, .composer-tool-icon.brand-openai svg, .composer-tool-icon.brand-gmail svg { fill: currentColor; stroke: none; }
+.composer-tool-icon.brand-gmail { color: #ea4335; }
+.composer-tool-copy { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: 10px; }
+.composer-tool-copy strong { flex: 0 0 auto; font-size: 12px; font-weight: 500; }
+.composer-tool-copy small { overflow: hidden; color: #aaa; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.composer-tool-cta { flex: 0 0 auto; padding-left: 8px; color: #ddd; font-size: 11px; }
+.composer-tool-divider { height: 1px; margin: 5px 3px; background: #454545; }
 .composer-icon { display: inline-grid; flex: 0 0 auto; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #bdbdbd; cursor: pointer; }
 .composer-icon:hover { background: #2a2a2a; color: #fff; }
 .add-button svg { width: 19px; height: 19px; }
@@ -324,7 +337,23 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .tool-submit-btn:hover:not(:disabled) { transform: translateY(-1px); }
 .tool-submit-btn:disabled { opacity: .6; cursor: wait; }
 .tool-result { margin-top: 20px; padding: 20px; border: 1px solid #303030; border-radius: 12px; background: #121212; color: #e8e8e8; font-size: 13px; line-height: 1.75; white-space: pre-wrap; }
-.tool-error { margin-top: 13px; color: #ff8888; font-size: 12px; }
+.search-results { display: grid; gap: 14px; white-space: normal; }
+.search-result { padding-bottom: 12px; border-bottom: 1px solid #2d2d2d; }
+.search-result:last-child { padding-bottom: 0; border-bottom: 0; }
+.search-result a, .generated-image-result a { color: #8bb9ff; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.search-result a:hover, .generated-image-result a:hover { text-decoration: underline; }
+.search-result p { margin: 6px 0 0; color: #aaa; font-size: 12px; }
+.research-result { white-space: normal; }
+.research-result h4 { margin: 20px 0 0; }
+.research-result .search-results { margin-top: 10px; padding: 0; border: 0; background: transparent; }
+.generated-image-result { display: grid; gap: 14px; white-space: normal; }
+.generated-image-result img { display: block; width: min(100%, 640px); max-height: 65vh; margin: auto; border-radius: 10px; object-fit: contain; }
+.generated-image-result a { justify-self: start; }
+.sketch-instructions { margin: 0 0 14px; color: #a4a4a4; font-size: 12px; }
+.sketch-canvas { display: block; width: 100%; max-height: 65vh; border: 1px solid #383838; border-radius: 10px; background: #fff; cursor: crosshair; touch-action: none; }
+.sketch-actions { display: flex; gap: 10px; margin-top: 12px; }
+.sketch-actions .tool-submit-btn { width: auto; flex: 1; text-align: center; text-decoration: none; }
+.sketch-secondary { border: 1px solid #444; background: #202020; color: #eee; }
 .quiz-question { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #2d2d2d; }
 .quiz-question p.q-text { margin: 0 0 10px; color: #eee; font-weight: 600; }
 .quiz-option { display: block; width: 100%; margin: 7px 0; padding: 9px 12px; border: 1px solid #333; border-radius: 8px; background: #1a1a1a; color: #ccc; text-align: left; cursor: pointer; }
@@ -350,7 +379,10 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
     .welcome-screen p { max-width: 280px; line-height: 1.5; }
     .suggestion-row { max-width: 360px; }
     .suggestion { font-size: 11px; }
-    .chat-thread { width: calc(100% - 30px); padding-top: 68px; }
+    .chat-thread { padding: 68px 15px 30px; }
+    .composer-tools-menu { width: min(520px, calc(100vw - 36px)); max-height: 60vh; }
+    .composer-tool-option { min-height: 40px; }
+    .composer-tool-copy { align-items: flex-start; flex-direction: column; gap: 2px; }
     .message-bubble { max-width: 90%; font-size: 14px; }
     .composer-area { padding: 10px 10px 12px; }
     .composer { gap: 5px; padding-left: 8px; }

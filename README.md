@@ -7,6 +7,8 @@ Ayron is a Flask-powered AI assistant with Google and email-code sign-in, chat h
 - Google sign-in and one-time email verification codes
 - Firebase Authentication and Firestore user profiles
 - AI assistant and utility APIs powered by Groq
+- Tavily web search and OpenAI-assisted sourced research
+- Cloudflare Workers AI image generation and an interactive sketch canvas
 - Weather, cricket, holiday/special-date, and PDF tools
 
 ## Requirements
@@ -50,7 +52,7 @@ Set these variables for both Preview and Production deployments:
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD`
 - `GROQ_API_KEY`
 
-Set optional module keys such as `OPENWEATHER_API_KEY` and `CRICKET_API_KEY` if those modules are needed.
+Set optional module keys such as `OPENWEATHER_API_KEY` and `CRICKET_API_KEY` if those modules are needed. The composer tools require server-side `TAVILY_API_KEY` for web search, `TAVILY_API_KEY` plus `OPENAI_API_KEY` for deep research, and `CLOUDFLARE_ACCOUNT_ID` plus `CLOUDFLARE_API_TOKEN` for image generation. `OPENAI_MODEL` and `CLOUDFLARE_IMAGE_MODEL` can optionally override their defaults. Set these in the hosting provider's environment settings as well as local `.env`; never place API keys in frontend code or commit them.
 To show the next holiday above the chat welcome screen, set `CALENDARIFIC_API_KEY` and optionally `CALENDARIFIC_COUNTRY` (two-letter country code, default `IN`) in the server environment. Do not put the Calendarific key in frontend code or commit it.
 
 Firebase must authorize the deployed site's domain for Google sign-in. Deploy `firestore.rules` to the same Firebase project.

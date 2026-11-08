@@ -292,6 +292,176 @@ def ask_groq(system_prompt, user_prompt):
     return response.choices[0].message.content
 
 
+def search_web(query, search_depth="fast", max_results=6):
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise RuntimeError("Web search is unavailable because TAVILY_API_KEY is not configured.")
+
+    response = requests.post(
+        "https://api.tavily.com/search",
+        json={
+            "api_key": api_key,
+            "query": query,
+            "search_depth": search_depth,
+            "max_results": max_results,
+            "include_answer": False,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise ValueError("Tavily returned an invalid search response.")
+
+    clean_results = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        url = result.get("url")
+        title = result.get("title")
+        content = result.get("content")
+        if isinstance(url, str) and url.startswith(("https://", "http://")):
+            clean_results.append({
+                "title": title if isinstance(title, str) else url,
+                "url": url,
+                "content": content if isinstance(content, str) else "",
+            })
+    return clean_results
+
+
+@app.post("/api/web-search")
+@require_firebase_user
+def web_search():
+    data = request.get_json(silent=True)
+    query = data.get("query", "") if isinstance(data, dict) else ""
+    if not isinstance(query, str):
+        return jsonify({"error": "Enter a search query of up to 500 characters."}), 400
+    query = query.strip()
+    if not query or len(query) > 500:
+        return jsonify({"error": "Enter a search query of up to 500 characters."}), 400
+    try:
+        results = search_web(query)
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+    except (requests.RequestException, ValueError):
+        logger.exception("Web search request failed.")
+        return jsonify({"error": "Web search failed. Check the Tavily configuration and try again."}), 502
+    return jsonify({"results": results})
+
+
+@app.post("/api/deep-research")
+@require_firebase_user
+def deep_research():
+    data = request.get_json(silent=True)
+    query = data.get("query", "") if isinstance(data, dict) else ""
+    if not isinstance(query, str):
+        return jsonify({"error": "Enter a research question of up to 500 characters."}), 400
+    query = query.strip()
+    if not query or len(query) > 500:
+        return jsonify({"error": "Enter a research question of up to 500 characters."}), 400
+    if not os.getenv("OPENAI_API_KEY"):
+        return jsonify({"error": "Deep research is unavailable because OPENAI_API_KEY is not configured."}), 503
+
+    try:
+        sources = search_web(query, search_depth="advanced", max_results=8)
+        if not sources:
+            return jsonify({"error": "No sources were found. Try a more specific question."}), 404
+
+        source_text = "\n\n".join(
+            f"Source: {source['title']}\nURL: {source['url']}\n"
+            f"Excerpt: {source['content'][:1800]}"
+            for source in sources
+        )
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
+            json={
+                "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Write a concise, balanced research report using only the supplied "
+                            "web sources. Cite claims with markdown links to the source URLs. "
+                            "Note uncertainty or conflicting evidence."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Research question: {query}\n\nWeb sources:\n{source_text}",
+                    },
+                ],
+                "max_tokens": 1200,
+            },
+            timeout=45,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        report = payload.get("choices", [{}])[0].get("message", {}).get("content")
+        if not isinstance(report, str) or not report.strip():
+            raise ValueError("OpenAI returned an empty research report.")
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+    except requests.RequestException:
+        logger.exception("Deep research request failed.")
+        return jsonify({"error": "Deep research failed. Check the API configuration and try again."}), 502
+    except (ValueError, IndexError, KeyError, TypeError):
+        logger.exception("Deep research returned an invalid response.")
+        return jsonify({"error": "Deep research returned an invalid response. Please try again."}), 502
+
+    return jsonify({"report": report, "sources": sources})
+
+
+@app.post("/api/generate-image")
+@require_firebase_user
+def generate_image():
+    data = request.get_json(silent=True)
+    prompt = data.get("prompt", "") if isinstance(data, dict) else ""
+    if not isinstance(prompt, str):
+        return jsonify({"error": "Describe an image in up to 1,000 characters."}), 400
+    prompt = prompt.strip()
+    if not prompt or len(prompt) > 1000:
+        return jsonify({"error": "Describe an image in up to 1,000 characters."}), 400
+
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+    if not account_id or not api_token:
+        return jsonify({
+            "error": (
+                "Image generation is unavailable. Configure CLOUDFLARE_ACCOUNT_ID "
+                "and CLOUDFLARE_API_TOKEN on the server."
+            )
+        }), 503
+    if not re.fullmatch(r"[a-fA-F0-9]{32}", account_id):
+        return jsonify({"error": "CLOUDFLARE_ACCOUNT_ID must be a 32-character hexadecimal ID."}), 500
+
+    model = os.getenv("CLOUDFLARE_IMAGE_MODEL", "@cf/black-forest-labs/flux-1-schnell")
+    endpoint = (
+        f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+    )
+    try:
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {api_token}"},
+            json={"prompt": prompt, "steps": 4},
+            timeout=90,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        image = payload.get("result", {}).get("image")
+        if payload.get("success") is False or not isinstance(image, str) or not image:
+            raise ValueError("Cloudflare returned an invalid image response.")
+    except requests.RequestException:
+        logger.exception("Image generation request failed.")
+        return jsonify({"error": "Image generation failed. Check the Cloudflare configuration and try again."}), 502
+    except (ValueError, AttributeError):
+        logger.exception("Image generation returned an invalid response.")
+        return jsonify({"error": "Image generation returned an invalid response. Please try again."}), 502
+
+    return jsonify({"image": f"data:image/jpeg;base64,{image}"})
+
+
 def extract_pdf_text(file_storage):
     """Extracts text from an uploaded PDF file. Raises on failure."""
     reader = PdfReader(file_storage)
