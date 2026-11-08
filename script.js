@@ -109,8 +109,26 @@ async function loadSpecialDate() {
             return;
         }
 
+        const holidayNames = data.holiday.names;
+        if (!Array.isArray(holidayNames) || holidayNames.length === 0) {
+            throw new Error("The special-date response did not include a holiday name.");
+        }
+
+        const diwali = holidayNames.find(name => /diwali|deepavali/i.test(name));
+        const christmas = holidayNames.find(name => /christmas/i.test(name));
+        const newYear = holidayNames.find(name => /new year's day/i.test(name));
+        const holidayName = diwali
+            ? "Diwali"
+            : christmas
+                ? "Christmas"
+                : newYear
+                    ? "New Year"
+                    : holidayNames[0].split(/[/(]/, 1)[0].trim();
+        specialDateName.textContent = christmas && !diwali
+            ? "Merry Christmas!"
+            : `Happy ${holidayName}!`;
+
         const holidayDate = new Date(`${data.holiday.date}T00:00:00`);
-        specialDateName.textContent = data.holiday.names.join(", ");
         specialDateDay.dateTime = data.holiday.date;
         specialDateDay.textContent = new Intl.DateTimeFormat(undefined, {
             weekday: "short",
