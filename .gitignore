@@ -10,3 +10,5 @@ backgroundfull.mp4
 *.mp4
 logos/
 logos/
+.vercel
+.env*

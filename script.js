@@ -146,6 +146,15 @@ async function loadSpecialDate() {
 }
 
 function appendInlineMarkdown(parent, text) {
+    const breakParts = text.split(/<br\s*\/?>/i);
+    if (breakParts.length > 1) {
+        breakParts.forEach((part, index) => {
+            if (index > 0) parent.appendChild(document.createElement("br"));
+            appendInlineMarkdown(parent, part);
+        });
+        return;
+    }
+
     const tokenPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|_([^_\n]+)_|(https?:\/\/[^\s<]+)/g;
     let lastIndex = 0;
     let match;
@@ -210,6 +219,17 @@ function createMarkdownLink(label, href) {
     return link;
 }
 
+function splitMarkdownTableRow(line) {
+    const trimmed = line.trim();
+    if (!trimmed.includes("|")) return null;
+    const row = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+    return row.split("|").map(cell => cell.trim());
+}
+
+function isMarkdownTableSeparator(cells) {
+    return cells.length >= 2 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
 function renderAssistantMarkdown(container, text) {
     container.replaceChildren();
     const lines = text.split(/\r?\n/);
@@ -231,7 +251,57 @@ function renderAssistantMarkdown(container, text) {
         listType = null;
     };
 
-    lines.forEach(line => {
+    const appendTable = (headerCells, rows) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "message-table-wrap";
+        const table = document.createElement("table");
+        const head = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        headerCells.forEach(cellText => {
+            const cell = document.createElement("th");
+            appendInlineMarkdown(cell, cellText);
+            headerRow.appendChild(cell);
+        });
+        head.appendChild(headerRow);
+        table.appendChild(head);
+
+        const body = document.createElement("tbody");
+        rows.forEach(rowCells => {
+            const row = document.createElement("tr");
+            rowCells.forEach(cellText => {
+                const cell = document.createElement("td");
+                appendInlineMarkdown(cell, cellText);
+                row.appendChild(cell);
+            });
+            body.appendChild(row);
+        });
+        table.appendChild(body);
+        wrapper.appendChild(table);
+        container.appendChild(wrapper);
+    };
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const tableHeader = splitMarkdownTableRow(line);
+        const tableSeparator = lines[index + 1] ? splitMarkdownTableRow(lines[index + 1]) : null;
+        if (tableHeader && tableSeparator
+            && tableHeader.length === tableSeparator.length
+            && isMarkdownTableSeparator(tableSeparator)) {
+            flushParagraph();
+            flushList();
+            const rows = [];
+            index += 2;
+            while (index < lines.length) {
+                const row = splitMarkdownTableRow(lines[index]);
+                if (!row || row.length !== tableHeader.length) break;
+                rows.push(row);
+                index += 1;
+            }
+            appendTable(tableHeader, rows);
+            index -= 1;
+            continue;
+        }
+
         const heading = line.match(/^\s{0,3}(#{1,4})\s+(.+?)\s*#*\s*$/);
         const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
         const numbered = line.match(/^\s*(\d+)[.)]\s+(.+)$/);
@@ -263,7 +333,7 @@ function renderAssistantMarkdown(container, text) {
             flushList();
             paragraphLines.push(line.trim());
         }
-    });
+    }
 
     flushParagraph();
     flushList();
