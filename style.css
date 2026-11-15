@@ -23,6 +23,7 @@ body {
     width: 100%;
     min-width: 320px;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     background: var(--page);
     color: var(--text);
@@ -390,7 +391,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
     .composer-tool-option { min-height: 40px; }
     .composer-tool-copy { align-items: flex-start; flex-direction: column; gap: 2px; }
     .message-bubble { max-width: 90%; font-size: 14px; }
-    .composer-area { padding: 10px 10px 12px; }
+    .composer-area { padding: 10px 10px calc(12px + env(safe-area-inset-bottom, 0px)); }
     .composer { gap: 5px; padding-left: 8px; }
     .composer-actions { gap: 1px; }
     .think-button { padding: 0 5px; }
